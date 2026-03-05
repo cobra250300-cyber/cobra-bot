@@ -1,39 +1,25 @@
-# cobra-bot
 import requests, random, io
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 TOKEN = '8287417165:AAHPHSh-WE6kIuy-Ueoo4QbQA7IP41oTKx4'
 
-# دالة توليد الصور المضمونة
 async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     p = " ".join(context.args)
-    if not p: return await update.message.reply_text("❌ اكتب وصفاً للصورة.")
-    
-    status = await update.message.reply_text("⏳ جاري تصميم صورتك...")
+    if not p: return await update.message.reply_text("❌ اكتب وصفاً.")
+    status = await update.message.reply_text("⏳ جاري التصميم...")
     try:
-        # رابط المحرك مع Seed عشوائي لضمان التجديد
-        url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(p)}?seed={random.randint(1,999999)}&width=1024&height=1024&nologo=true"
-        
-        # تحميل البيانات في الذاكرة لتجنب مشكلة الشعار
-        response = requests.get(url, timeout=30)
+        url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(p)}?seed={random.randint(1,999999)}&nologo=true"
+        response = requests.get(url, timeout=40)
         if response.status_code == 200:
             img = io.BytesIO(response.content)
-            img.name = 'design.jpg'
-            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
+            img.name = 'cobra.jpg'
             await update.message.reply_photo(photo=img, caption=f"✅ تم التصميم: {p}")
             await status.delete()
-        else:
-            await status.edit_text("❌ السيرفر لا يستجيب.")
-    except Exception as e:
-        await status.edit_text(f"❌ خطأ: {str(e)[:50]}")
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("💀 نظام كوبرا جاهز للعمل 24/7.")
+    except:
+        await status.edit_text("❌ خطأ في السيرفر.")
 
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("gen", generate_image))
-    print("🚀 Cobra v12 is Running...")
     app.run_polling()
