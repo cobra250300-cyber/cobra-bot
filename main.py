@@ -1,122 +1,116 @@
-import requests
-import random
 import os
+import random
 import io
+import httpx
+import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ChatAction
 
-# --- الإعدادات المركزية ---
-TOKEN = '8287417165:AAHPHSh-WE6kIuy-Ueoo4QbQA7IP41oTKx4'
+# إعداد السجلات (Logs) لمتابعة أداء البوت على Render
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- دالة الترجمة (مهمة جداً لجودة الصور) ---
-def translate_to_english(text):
-    try:
-        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q={requests.utils.quote(text)}"
-        response = requests.get(url, timeout=5)
-        return response.json()[0][0][0]
-    except:
-        return text # إذا فشلت الترجمة، نرسل النص الأصلي
+# جلب التوكن من إعدادات سيرفر Render (للأمان)
+TOKEN = os.getenv('BOT_TOKEN')
 
-# --- دالة الذكاء الاصطناعي (أسرع) ---
-def get_ai_response(text):
-    try:
-        url = f"https://text.pollinations.ai/{requests.utils.quote('أنت كوبرا، خبير تقني واسع المعرفة، أجب بالعربية وباختصار: ' + text)}"
-        response = requests.get(url, timeout=10)
-        return response.text.strip() if response.status_code == 200 else "⚠️ النظام مشغول حالياً."
-    except:
-        return "📡 خطأ في الاتصال بالقاعدة."
+# ذاكرة الجلسات (تختفي عند إعادة تشغيل السيرفر في الخطة المجانية)
+user_memory = {}
 
-# --- [الأوامر] ---
+async def translate_to_english(text):
+    url = "https://translate.googleapis.com/translate_a/single"
+    params = {"client": "gtx", "sl": "auto", "tl": "en", "dt": "t", "q": text}
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, params=params, timeout=5.0)
+            return response.json()[0][0][0]
+        except:
+            return text
 
-# 1. أمر الصور المصلح (تحميل ثم إرسال) (/gen)
-async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_prompt = " ".join(context.args)
-    if not user_prompt:
-        await update.message.reply_text("❌ أرسل وصفاً للصورة بعد الأمر. مثال: `/gen هاكر حزين`")
-        return
-
-    # إظهار حالة "typing" ليعرف المستخدم أن البوت يعمل
-    status_msg = await update.message.reply_text("⏳ جاري ترجمة الوصف ومعالجته في سيرفر التصميم...")
+async def get_ai_response_advanced(user_id, text):
+    if user_id not in user_memory:
+        user_memory[user_id] = []
     
-    try:
-        # ترجمة الوصف العربي إلى إنجليزي لضمان عمل السيرفر
-        english_prompt = translate_to_english(user_prompt)
-        await status_msg.edit_text(f"🎨 جاري رسم: `{english_prompt}`...")
-        
-        # إعداد الرابط مع Seed عشوائي لمنع التكرار
-        seed = random.randint(1, 1000000)
-        url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(english_prompt)}?seed={seed}&width=1024&height=1024&nologo=true&model=flux"
-        
-        # --- الخطوة السحرية: تحميل الصورة إلى الذاكرة ---
-        # بدلاً من إرسال رابط، البوت يقوم بتحميل الصورة أولاً
-        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
-        image_response = requests.get(url, timeout=30) # زيادة المهلة
-        
-        if image_response.status_code == 200:
-            # تحويل البيانات إلى ملف وهمي في الذاكرة
-            image_file = io.BytesIO(image_response.content)
-            image_file.name = 'cobra_design.jpg'
-            
-            # إرسال الصورة كملف حقيقي، وليس كرابط
-            await update.message.reply_photo(
-                photo=image_file, 
-                caption=f"✅ **تم التصميم بنجاح بواسطة كوبرا**\n 🔍 الوصف: {user_prompt}",
-                parse_mode='Markdown'
-            )
-            await status_msg.delete()
-        else:
-            await status_msg.edit_text("❌ فشل السيرفر في توليد الصورة، حاول لاحقاً.")
-            
-    except Exception as e:
-        await status_msg.edit_text(f"❌ فشل المحرك. حاول تبسيط الوصف.\nالخطأ: {str(e)[:50]}")
+    user_memory[user_id].append(f"المستخدم: {text}")
+    context_string = "\n".join(user_memory[user_id][-5:])
+    
+    system_prompt = "أنت 'كوبرا'، خبير تقني متمكن. أجب بالعربية بذكاء واختصار مع إيموجي تقني. سياق الحوار:\n"
+    full_prompt = f"{system_prompt}\n{context_string}\nكوبرا:"
+    url = f"https://text.pollinations.ai/{httpx.utils.quote(full_prompt)}"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, timeout=15.0)
+            if response.status_code == 200:
+                ai_reply = response.text.strip()
+                user_memory[user_id].append(f"كوبرا: {ai_reply}")
+                return ai_reply
+            return "⚠️ النظام مشغول حالياً."
+        except:
+            return "📡 خطأ في الاتصال بالدماغ المركزي."
 
-# 2. أمر توليد الأرقام (/no)
-async def phone_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = await update.message.reply_text("📡 جاري سحب 100 رقم من شبكة Wecom...")
-    prefix = "+97255"
-    start_num = random.randint(2000000, 8000000)
-    numbers = [f"{prefix}{start_num + i}" for i in range(100)]
-    await update.message.reply_text("📱 **[الجزء 1]:**\n\n" + "\n".join(numbers[:50]), parse_mode='Markdown')
-    await update.message.reply_text("📱 **[الجزء 2]:**\n\n" + "\n".join(numbers[50:]), parse_mode='Markdown')
-    await msg.delete()
-
-# 3. أمر البيانات الوهمية (/cod)
-async def cod_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cards = [f"`4854{random.randint(1000,9999)}{random.randint(1000,9999)}{random.randint(1000,9999)}|{random.randint(1,12):02}|{random.randint(25,30)}|{random.randint(100,999)}`" for _ in range(5)]
-    await update.message.reply_text("💳 **بيانات المحاكاة المستخرجة:**\n\n" + "\n".join(cards), parse_mode='Markdown')
-
-# 4. أمر البداية
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
-        "💀 **[COBRA SYSTEM V10 ONLINE]**\n"
+        "💀 **[COBRA SYSTEM V11 - CLOUD ONLINE]**\n"
         "------------------------------\n"
-        "مرحباً بك في الواجهة المركزية.\n\n"
-        "• `/gen` [وصف] : تصميم صور (تم إصلاح مشكلة الرابط).\n"
-        "• `/no` : استخراج 100 رقم Wecom.\n"
-        "• `/cod` : بيانات محاكاة CC.\n"
-        "• **دردشة:** تحدث معي مباشرة وسأجيبك."
+        "تم تفعيل النظام على السيرفر السحابي.\n\n"
+        "• `/gen` [وصف] : توليد صور (Flux).\n"
+        "• `/no` : استخراج أرقام Wecom.\n"
+        "• `/cod` : محاكاة بيانات CC.\n"
+        "• **الدردشة:** تحدث معي مباشرة."
     )
     await update.message.reply_text(welcome, parse_mode='Markdown')
 
-# --- معالج الرسائل التلقائي (الرد الذكي) ---
-async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text.startswith('/'): return
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    reply = get_ai_response(update.message.text)
-    await update.message.reply_text(f"💻 **[سجل كوبرا]:** {reply}")
+async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_prompt = " ".join(context.args)
+    if not user_prompt:
+        await update.message.reply_text("❌ أرسل وصفاً للصورة. مثال: `/gen هاكر`")
+        return
 
-# --- تشغيل النظام ---
+    status_msg = await update.message.reply_text("⏳ جاري المعالجة...")
+    try:
+        english_prompt = await translate_to_english(user_prompt)
+        seed = random.randint(1, 1000000)
+        url = f"https://image.pollinations.ai/prompt/{httpx.utils.quote(english_prompt)}?seed={seed}&width=1024&height=1024&nologo=true&model=flux"
+        
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_PHOTO)
+        async with httpx.AsyncClient() as client:
+            image_res = await client.get(url, timeout=40.0)
+        
+        if image_res.status_code == 200:
+            image_file = io.BytesIO(image_res.content)
+            image_file.name = 'cobra.jpg'
+            await update.message.reply_photo(photo=image_file, caption=f"✅ تم التصميم لـ: {user_prompt}")
+            await status_msg.delete()
+        else:
+            await status_msg.edit_text("❌ فشل السيرفر.")
+    except Exception as e:
+        await status_msg.edit_text(f"❌ حدث خطأ تقني.")
+
+async def phone_gen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    prefix = "+97255"
+    numbers = [f"{prefix}{random.randint(2000000, 8000000)}" for _ in range(50)]
+    await update.message.reply_text("📱 **قائمة الأرقام:**\n\n" + "\n".join(numbers), parse_mode='Markdown')
+
+async def cod_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cards = [f"`4854{random.randint(1000,9999)}{random.randint(1000,9999)}{random.randint(1000,9999)}|{random.randint(1,12):02}|{random.randint(25,30)}|{random.randint(100,999)}`" for _ in range(5)]
+    await update.message.reply_text("💳 **بيانات المحاكاة:**\n\n" + "\n".join(cards), parse_mode='Markdown')
+
+async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.text or update.message.text.startswith('/'): return
+    user_id = update.effective_user.id
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    reply = await get_ai_response_advanced(user_id, update.message.text)
+    await update.message.reply_text(f"🛡️ **[COBRA AI]:** {reply}", parse_mode='Markdown')
+
 if __name__ == '__main__':
-    app = ApplicationBuilder().token(TOKEN).build()
-    
-    # تسجيل الأوامر
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("gen", generate_image))
-    app.add_handler(CommandHandler("no", phone_gen))
-    app.add_handler(CommandHandler("cod", cod_cmd))
-    
-    # تسجيل معالج الرسائل العادية
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), chat_handler))
-    
-    print("✅ Cobra v10 with Binary Image Sending is Running...")
-    app.run_polling()
+    if not TOKEN:
+        print("❌ Error: BOT_TOKEN variable is not set!")
+    else:
+        app = ApplicationBuilder().token(TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("gen", generate_image))
+        app.add_handler(CommandHandler("no", phone_gen))
+        app.add_handler(CommandHandler("cod", cod_cmd))
+        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), chat_handler))
+        print("🚀 Cobra Cloud Version is Running...")
+        app.run_polling()
