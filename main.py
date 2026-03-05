@@ -7,13 +7,13 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ChatAction
 
-# إعداد السجلات (Logs) لمتابعة أداء البوت على Render
+# إعداد السجلات (Logs)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# جلب التوكن من إعدادات سيرفر Render (للأمان)
-TOKEN = os.getenv('BOT_TOKEN')
+# التوكن الخاص بك تم وضعه هنا مباشرة
+TOKEN = '8287417165:AAHPHSh-WE6kIuy-Ueoo4QbQA7IP41oTKx4'
 
-# ذاكرة الجلسات (تختفي عند إعادة تشغيل السيرفر في الخطة المجانية)
+# ذاكرة الجلسات
 user_memory = {}
 
 async def translate_to_english(text):
@@ -50,12 +50,12 @@ async def get_ai_response_advanced(user_id, text):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome = (
-        "💀 **[COBRA SYSTEM V11 - CLOUD ONLINE]**\n"
+        "💀 **[COBRA SYSTEM V11 - ONLINE]**\n"
         "------------------------------\n"
-        "تم تفعيل النظام على السيرفر السحابي.\n\n"
-        "• `/gen` [وصف] : توليد صور (Flux).\n"
-        "• `/no` : استخراج أرقام Wecom.\n"
-        "• `/cod` : محاكاة بيانات CC.\n"
+        "النظام يعمل الآن بالتوكن المباشر.\n\n"
+        "• `/gen` [وصف] : توليد صور.\n"
+        "• `/no` : استخراج أرقام.\n"
+        "• `/cod` : محاكاة بيانات.\n"
         "• **الدردشة:** تحدث معي مباشرة."
     )
     await update.message.reply_text(welcome, parse_mode='Markdown')
@@ -63,7 +63,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def generate_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_prompt = " ".join(context.args)
     if not user_prompt:
-        await update.message.reply_text("❌ أرسل وصفاً للصورة. مثال: `/gen هاكر`")
+        await update.message.reply_text("❌ أرسل وصفاً للصورة.")
         return
 
     status_msg = await update.message.reply_text("⏳ جاري المعالجة...")
@@ -103,14 +103,11 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🛡️ **[COBRA AI]:** {reply}", parse_mode='Markdown')
 
 if __name__ == '__main__':
-    if not TOKEN:
-        print("❌ Error: BOT_TOKEN variable is not set!")
-    else:
-        app = ApplicationBuilder().token(TOKEN).build()
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("gen", generate_image))
-        app.add_handler(CommandHandler("no", phone_gen))
-        app.add_handler(CommandHandler("cod", cod_cmd))
-        app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), chat_handler))
-        print("🚀 Cobra Cloud Version is Running...")
-        app.run_polling()
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("gen", generate_image))
+    app.add_handler(CommandHandler("no", phone_gen))
+    app.add_handler(CommandHandler("cod", cod_cmd))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), chat_handler))
+    print("🚀 Cobra is running with direct token...")
+    app.run_polling()
