@@ -15,7 +15,11 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 
 # ==================== التوكن مباشرة (للتشغيل السريع محلياً) ====================
 # ⚠️ تنبيه: هذا غير آمن للنشر على الإنترنت
-TOKEN = '8287417165:AAHPHSh-WE6kIuy-Ueoo4QbQA7IP41oTKx4'
+import os
+
+# 
+TOKEN = os.environ.get('BOT_TOKEN')
+
 
 # ==================== باقي الكود ====================
 
