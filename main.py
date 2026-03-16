@@ -9,7 +9,11 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # --- الإعدادات (سيتم جلبها من Render) ---
-TOKEN = '8287417165:AAHPHSh-WE6kIuy-Ueoo4QbQA7IP41oTKx4'
+import os
+
+# بدلاً من وضع التوكن مباشرة، نجعله يقرأه من إعدادات السيرفر
+TOKEN = os.environ.get('BOT_TOKEN')
+
 GEMINI_KEY = 'AIzaSyCrhUobT6vca2LjpuSspVaMfczqLdu89gU'
 DEVELOPER_ID = 2132028510
 
